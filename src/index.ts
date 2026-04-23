@@ -1,5 +1,29 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { generateText } from 'ai';
+import { generateObject, generateText } from 'ai';
+import { z } from 'zod';
+
+const productSchema = z.object({
+	name: z.string(),
+	price: z.number(),
+	currency: z.string(),
+	inStock: z.boolean(),
+	dimensions: z.object({
+		length: z.number(),
+		width: z.number(),
+		height: z.number(),
+		unit: z.string(),
+	}),
+	manufacturer: z.object({
+		name: z.string(),
+		country: z.string(),
+		website: z.string(),
+	}),
+	specifications: z.object({
+		weight: z.number(),
+		weightUnit: z.string(),
+		warrantyMonths: z.number(),
+	}),
+});
 
 const INTERACTION_ID_HEADER = 'X-Interaction-Id';
 
@@ -47,6 +71,21 @@ export default {
 				return Response.json({
 					greeting: `Hello ${payload.name}`,
 				});
+			case 'JSON_MODE': {
+				if (!env.DEV_SHOWDOWN_API_KEY) {
+					throw new Error('DEV_SHOWDOWN_API_KEY is required');
+				}
+
+				const workshopLlm = createWorkshopLlm(env.DEV_SHOWDOWN_API_KEY, interactionId);
+				const result = await generateObject({
+					model: workshopLlm.chatModel('deli-4'),
+					schema: productSchema,
+					system: 'Extract product data from the description into the given schema. Every required fact is present in the text.',
+					prompt: payload.description,
+				});
+
+				return Response.json(result.object);
+			}
 			case 'BASIC_LLM': {
 				if (!env.DEV_SHOWDOWN_API_KEY) {
 					throw new Error('DEV_SHOWDOWN_API_KEY is required');
